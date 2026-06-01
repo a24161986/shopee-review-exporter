@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "description": "Scan the current tab for Shopee product links and export product reviews to Excel or JSON.",
   "permissions": [
-    "activeTab",
     "tabs",
     "scripting",
     "downloads",

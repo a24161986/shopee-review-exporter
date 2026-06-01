@@ -10,7 +10,7 @@
   <main class="popup-shell">
     <header class="header">
       <h1>Shopee 评论导出</h1>
-      <button id="scanButton" class="button secondary" type="button">扫描当前页</button>
+      <button id="scanWindowButton" class="button secondary" type="button">识别当前窗口商品页</button>
     </header>
 
     <section class="settings" aria-label="导出设置">
@@ -41,21 +41,34 @@
       </label>
     </section>
 
+    <section class="paste-panel" aria-label="粘贴商品链接">
+      <label>
+        粘贴商品链接
+        <textarea id="pasteInput" rows="4" placeholder="每行一个商品链接，或粘贴包含商品链接的一段文本"></textarea>
+      </label>
+      <div class="paste-actions">
+        <button id="importLinksButton" class="button secondary" type="button">导入链接</button>
+        <button id="clearPasteButton" class="button secondary" type="button">清空输入</button>
+      </div>
+    </section>
+
     <section class="actions">
       <button id="startButton" class="button primary" type="button" disabled>开始导出</button>
       <button id="pauseButton" class="button secondary" type="button" disabled>暂停</button>
       <button id="stopButton" class="button danger" type="button" disabled>停止</button>
+      <button id="retryFailedButton" class="button secondary" type="button" disabled>重试失败项</button>
     </section>
 
-    <section class="summary" id="summary">尚未扫描</section>
+    <section class="summary" id="summary">尚未识别商品</section>
     <section class="task-list" id="taskList" aria-label="商品任务列表"></section>
     <footer class="status" id="status">就绪</footer>
   </main>
 
   <script src="../shared/shopee-sites.js"></script>
   <script src="../shared/url-parser.js"></script>
-  <script src="../shared/product-sources.js"></script>
   <script src="../shared/review-filter.js"></script>
+  <script src="../shared/product-sources.js"></script>
+  <script src="../shared/task-state.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
