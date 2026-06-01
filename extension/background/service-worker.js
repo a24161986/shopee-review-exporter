@@ -2,26 +2,16 @@ importScripts(
   '../lib/fflate.min.js',
   '../shared/shopee-sites.js',
   '../shared/reviews.js',
-  '../shared/export-format.js'
+  '../shared/export-format.js',
+  '../shared/xlsx-export.js'
 );
 
 const DEFAULT_LIMIT = 50;
 const PAGE_LOAD_TIMEOUT_MS = 30000;
 const RUNTIME_SETTLE_MS = 5000;
 const BETWEEN_PAGE_DELAY_MS = 800;
-const EXCEL_HEADERS = [
-  '商品链接',
-  '站点',
-  '店铺ID',
-  '商品ID',
-  '评论人',
-  '评分',
-  '评论内容',
-  '规格/变体',
-  '评论时间',
-  '图片链接',
-  '视频链接'
-];
+const STORAGE_KEY = 'shopeeReviewExporterState';
+const QUEUE_ALARM_NAME = 'shopeeReviewExporterQueue';
 
 let state = {
   running: false,
@@ -34,39 +24,52 @@ let state = {
 
 let activeRunId = 0;
 let stoppingPromise = null;
+let activeQueuePromise = null;
+const initializationPromise = initializeFromStorage();
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== QUEUE_ALARM_NAME) return;
+  initializationPromise
+    .then(() => continueQueue())
+    .catch(() => {});
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'START_EXPORT') {
-    startExport(message.products || [], message.settings || {})
+    initializationPromise
+      .then(() => startExport(message.products || [], message.settings || {}))
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
   }
 
   if (message.type === 'PAUSE_EXPORT') {
-    state.paused = true;
-    state.message = '已暂停';
-    publishState();
-    sendResponse({ ok: true });
+    initializationPromise
+      .then(() => pauseExport())
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
   }
 
   if (message.type === 'RESUME_EXPORT') {
-    state.paused = false;
-    state.message = '继续导出';
-    publishState();
-    sendResponse({ ok: true });
+    initializationPromise
+      .then(() => resumeExport())
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
   }
 
   if (message.type === 'STOP_EXPORT') {
-    stopExport().catch(() => {});
-    sendResponse({ ok: true });
+    initializationPromise
+      .then(() => stopExport())
+      .finally(() => sendResponse({ ok: true }));
     return true;
   }
 
   if (message.type === 'GET_STATE') {
-    sendResponse(snapshotState());
+    initializationPromise
+      .then(() => sendResponse(snapshotState()))
+      .catch(() => sendResponse(snapshotState()));
     return true;
   }
 
@@ -93,6 +96,7 @@ async function startExport(products, settings) {
 
   if (tasks.length === 0) {
     activeRunId += 1;
+    await clearQueueAlarm();
     state = {
       running: false,
       paused: false,
@@ -116,12 +120,21 @@ async function startExport(products, settings) {
     message: `准备导出 ${tasks.length} 个商品`
   };
   publishState();
-  runQueue(runId).catch((error) => {
-    if (!isActiveRun(runId)) return;
-    state.running = false;
-    state.message = `导出失败：${error.message || String(error)}`;
-    publishState();
-  });
+  continueQueue(runId);
+}
+
+async function pauseExport() {
+  state.paused = true;
+  state.message = '已暂停';
+  await clearQueueAlarm();
+  publishState();
+}
+
+async function resumeExport() {
+  state.paused = false;
+  state.message = '继续导出';
+  publishState();
+  continueQueue();
 }
 
 async function stopExport() {
@@ -129,6 +142,7 @@ async function stopExport() {
 
   stoppingPromise = (async () => {
     activeRunId += 1;
+    activeQueuePromise = null;
     state.stopped = true;
     state.paused = false;
     state.running = false;
@@ -141,6 +155,7 @@ async function stopExport() {
     }
 
     await closeCurrentTab();
+    await clearQueueAlarm();
     publishState();
   })();
 
@@ -186,44 +201,79 @@ async function runQueue(runId) {
   state.running = false;
   state.paused = false;
   state.message = state.stopped ? '已停止' : '全部任务完成';
+  await clearQueueAlarm();
   publishState();
+}
+
+function continueQueue(runId = activeRunId) {
+  if (!state.running || state.paused || state.stopped) {
+    if (state.paused || state.stopped) clearQueueAlarm().catch(() => {});
+    return;
+  }
+
+  scheduleQueueAlarm().catch(() => {});
+
+  if (activeQueuePromise) return;
+  const queuePromise = runQueue(runId)
+    .catch((error) => {
+      if (!isActiveRun(runId)) return;
+      state.running = false;
+      state.message = `导出失败：${error.message || String(error)}`;
+      clearQueueAlarm().catch(() => {});
+      publishState();
+    })
+    .finally(() => {
+      if (activeQueuePromise === queuePromise) {
+        activeQueuePromise = null;
+      }
+    });
+  activeQueuePromise = queuePromise;
 }
 
 async function processTask(runId, task) {
   assertActiveRun(runId);
   const tab = await chrome.tabs.create({ url: task.url, active: false });
+  if (!isActiveRun(runId) || state.stopped) {
+    await closeTabId(tab.id);
+    throw new Error('已停止');
+  }
+
   state.currentTabId = tab.id;
   publishState();
 
-  await waitForTabComplete(runId, tab.id);
-  await sleepInterruptibly(runId, RUNTIME_SETTLE_MS);
+  try {
+    await waitForTabComplete(runId, tab.id);
+    await sleepInterruptibly(runId, RUNTIME_SETTLE_MS);
 
-  const rawReviews = [];
-  let offset = 0;
+    const rawReviews = [];
+    let offset = 0;
 
-  while (rawReviews.length < task.target) {
-    assertActiveRun(runId);
-    await waitWhilePaused(runId);
-    assertActiveRun(runId);
+    while (rawReviews.length < task.target) {
+      assertActiveRun(runId);
+      await waitWhilePaused(runId);
+      assertActiveRun(runId);
 
-    const payload = await fetchReviewPage(tab.id, task, offset, DEFAULT_LIMIT);
-    assertActiveRun(runId);
+      const payload = await fetchReviewPage(tab.id, task, offset, DEFAULT_LIMIT);
+      assertActiveRun(runId);
 
-    const pageReviews = payload?.data?.ratings || [];
-    if (!Array.isArray(pageReviews) || pageReviews.length === 0) break;
+      const pageReviews = payload?.data?.ratings || [];
+      if (!Array.isArray(pageReviews) || pageReviews.length === 0) break;
 
-    rawReviews.push(...pageReviews);
-    task.fetched = Math.min(rawReviews.length, task.target);
-    publishState();
+      rawReviews.push(...pageReviews);
+      task.fetched = Math.min(rawReviews.length, task.target);
+      publishState();
 
-    if (pageReviews.length < DEFAULT_LIMIT) break;
-    offset += DEFAULT_LIMIT;
-    await sleepInterruptibly(runId, BETWEEN_PAGE_DELAY_MS);
+      if (pageReviews.length < DEFAULT_LIMIT) break;
+      offset += DEFAULT_LIMIT;
+      await sleepInterruptibly(runId, BETWEEN_PAGE_DELAY_MS);
+    }
+
+    const limitedReviews = rawReviews.slice(0, task.target);
+    const rows = ShopeeReviewExporter.normalizeReviewsForExport(task, limitedReviews);
+    await downloadRows(task, rows);
+  } finally {
+    await closeTabId(tab.id);
   }
-
-  const limitedReviews = rawReviews.slice(0, task.target);
-  const rows = ShopeeReviewExporter.normalizeReviewsForExport(task, limitedReviews);
-  await downloadRows(task, rows);
 }
 
 async function fetchReviewPage(tabId, task, offset, limit) {
@@ -268,109 +318,9 @@ async function downloadRows(task, rows) {
   const filename = ShopeeReviewExporter.buildDownloadFilename(task, rows.length, extension);
   const url = task.format === 'json'
     ? ShopeeReviewExporter.jsonDataUrl(rows)
-    : excelDataUrl(rows);
+    : ShopeeReviewExporter.excelDataUrl(rows);
 
   await chrome.downloads.download({ url, filename, saveAs: false });
-}
-
-function excelDataUrl(rows) {
-  const rowsForExcel = ShopeeReviewExporter.toExcelRows(rows);
-  const headers = rowsForExcel.length ? Object.keys(rowsForExcel[0]) : EXCEL_HEADERS;
-  const sheetRows = [
-    headers,
-    ...rowsForExcel.map((row) => headers.map((header) => row[header] ?? ''))
-  ];
-  const files = buildXlsxFiles(sheetRows);
-  const zipped = fflate.zipSync(files);
-  const base64 = uint8ToBase64(zipped);
-
-  return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
-}
-
-function buildXlsxFiles(sheetRows) {
-  return {
-    '[Content_Types].xml': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-</Types>`),
-    '_rels/.rels': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`),
-    'xl/_rels/workbook.xml.rels': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`),
-    'xl/workbook.xml': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets>
-    <sheet name="Reviews" sheetId="1" r:id="rId1"/>
-  </sheets>
-</workbook>`),
-    'xl/styles.xml': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
-  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
-  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
-  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
-</styleSheet>`),
-    'xl/worksheets/sheet1.xml': fflate.strToU8(buildWorksheetXml(sheetRows))
-  };
-}
-
-function buildWorksheetXml(rows) {
-  const columnWidths = [36, 14, 14, 14, 18, 8, 48, 24, 20, 48, 48]
-    .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
-    .join('');
-  const rowXml = rows.map((row, rowIndex) => {
-    const cells = row.map((value, columnIndex) => {
-      const ref = `${columnName(columnIndex + 1)}${rowIndex + 1}`;
-      return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
-    }).join('');
-
-    return `<row r="${rowIndex + 1}">${cells}</row>`;
-  }).join('');
-
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <cols>${columnWidths}</cols>
-  <sheetData>${rowXml}</sheetData>
-</worksheet>`;
-}
-
-function columnName(number) {
-  let name = '';
-  while (number > 0) {
-    const modulo = (number - 1) % 26;
-    name = String.fromCharCode(65 + modulo) + name;
-    number = Math.floor((number - modulo) / 26);
-  }
-  return name;
-}
-
-function escapeXml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function uint8ToBase64(bytes) {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return btoa(binary);
 }
 
 async function waitForTabComplete(runId, tabId) {
@@ -420,9 +370,14 @@ async function waitWhilePaused(runId) {
 
 async function closeCurrentTab() {
   if (state.currentTabId === null) return;
+  await closeTabId(state.currentTabId);
+}
 
-  const tabId = state.currentTabId;
-  state.currentTabId = null;
+async function closeTabId(tabId) {
+  if (tabId === null || typeof tabId === 'undefined') return;
+  if (state.currentTabId === tabId) {
+    state.currentTabId = null;
+  }
   await chrome.tabs.remove(tabId).catch(() => {});
 }
 
@@ -454,6 +409,64 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function initializeFromStorage() {
+  const saved = await loadPersistedState();
+  if (!saved) return;
+
+  state = {
+    running: Boolean(saved.running),
+    paused: Boolean(saved.paused),
+    stopped: Boolean(saved.stopped),
+    currentTabId: null,
+    tasks: Array.isArray(saved.tasks) ? saved.tasks : [],
+    message: saved.message || '就绪'
+  };
+
+  if (state.running && !state.stopped) {
+    activeRunId += 1;
+    for (const task of state.tasks) {
+      if (task.status === 'running') {
+        task.status = 'pending';
+      }
+    }
+    state.message = '恢复导出队列';
+    publishState();
+
+    if (state.paused) {
+      await clearQueueAlarm();
+    } else {
+      continueQueue(activeRunId);
+    }
+    return;
+  }
+
+  if (state.paused || state.stopped || !state.running) {
+    await clearQueueAlarm();
+  }
+}
+
+async function loadPersistedState() {
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEY);
+    const saved = result?.[STORAGE_KEY];
+    return saved && typeof saved === 'object' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistState(snapshot) {
+  chrome.storage.local.set({ [STORAGE_KEY]: snapshot }).catch(() => {});
+}
+
+async function scheduleQueueAlarm(delayInMinutes = 1) {
+  await chrome.alarms.create(QUEUE_ALARM_NAME, { delayInMinutes });
+}
+
+async function clearQueueAlarm() {
+  await chrome.alarms.clear(QUEUE_ALARM_NAME).catch(() => {});
+}
+
 function snapshotState() {
   return {
     running: state.running,
@@ -466,5 +479,13 @@ function snapshotState() {
 }
 
 function publishState() {
-  chrome.runtime.sendMessage({ type: 'EXPORT_STATE', state: snapshotState() }).catch(() => {});
+  const snapshot = snapshotState();
+  chrome.runtime.sendMessage({ type: 'EXPORT_STATE', state: snapshot }).catch(() => {});
+  persistState(snapshot);
+
+  if (snapshot.running && !snapshot.paused && !snapshot.stopped) {
+    scheduleQueueAlarm().catch(() => {});
+  } else {
+    clearQueueAlarm().catch(() => {});
+  }
 }
