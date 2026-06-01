@@ -1,6 +1,7 @@
 importScripts(
   '../lib/fflate.min.js',
   '../shared/shopee-sites.js',
+  '../shared/url-parser.js',
   '../shared/reviews.js',
   '../shared/export-format.js',
   '../shared/xlsx-export.js'
@@ -413,6 +414,8 @@ async function initializeFromStorage() {
   const saved = await loadPersistedState();
   if (!saved) return;
 
+  await cleanupRestoredTab(saved.currentTabId, saved.tasks);
+
   state = {
     running: Boolean(saved.running),
     paused: Boolean(saved.paused),
@@ -443,6 +446,41 @@ async function initializeFromStorage() {
   if (state.paused || state.stopped || !state.running) {
     await clearQueueAlarm();
   }
+}
+
+async function cleanupRestoredTab(tabId, tasks) {
+  if (tabId === null || typeof tabId === 'undefined') return;
+
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    return;
+  }
+
+  const unfinishedTasks = (Array.isArray(tasks) ? tasks : [])
+    .filter((task) => (task?.status === 'pending' || task?.status === 'running') && task.url);
+
+  if (unfinishedTasks.length === 0 || !isRestoredProductTab(tab?.url, unfinishedTasks)) {
+    return;
+  }
+
+  await closeTabId(tabId);
+}
+
+function isRestoredProductTab(tabUrl, unfinishedTasks) {
+  if (!tabUrl) return false;
+  if (unfinishedTasks.some((task) => task.url === tabUrl)) return true;
+
+  const tabProduct = ShopeeReviewExporter.parseShopeeProductUrl(tabUrl);
+  if (!tabProduct) return false;
+
+  return unfinishedTasks.some((task) => {
+    const taskProduct = ShopeeReviewExporter.parseShopeeProductUrl(task.url) || task;
+    return taskProduct.domain === tabProduct.domain
+      && String(taskProduct.shopId) === String(tabProduct.shopId)
+      && String(taskProduct.itemId) === String(tabProduct.itemId);
+  });
 }
 
 async function loadPersistedState() {
