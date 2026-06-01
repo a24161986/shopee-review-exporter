@@ -1,0 +1,16 @@
+{
+  "name": "shopee-review-exporter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension for exporting Shopee product reviews from links on the current tab.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "validate:manifest": "node scripts/validate-manifest.js",
+    "prepare:xlsx": "mkdir -p extension/lib && cp node_modules/xlsx/dist/xlsx.full.min.js extension/lib/xlsx.full.min.js",
+    "verify": "npm run test && npm run validate:manifest"
+  },
+  "devDependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
