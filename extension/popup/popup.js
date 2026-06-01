@@ -11,6 +11,7 @@ const status = document.getElementById('status');
 
 let products = [];
 let paused = false;
+let backgroundRunning = false;
 
 scanButton.addEventListener('click', scanCurrentTab);
 startButton.addEventListener('click', startExport);
@@ -46,9 +47,17 @@ async function scanCurrentTab() {
     renderProducts(products.map((product) => ({ ...product, status: 'pending', fetched: 0, target: getSettings().count })));
     summary.textContent = `找到 ${products.length} 个 Shopee 商品链接`;
     status.textContent = products.length ? '扫描完成' : '当前页没有可识别的 Shopee 商品链接';
-    startButton.disabled = products.length === 0;
+    startButton.disabled = backgroundRunning || products.length === 0;
   } catch (error) {
+    products = [];
+    renderProducts([]);
+    summary.textContent = '扫描失败，当前没有可导出的商品';
     status.textContent = `扫描失败：${error.message}`;
+    startButton.disabled = true;
+    if (!backgroundRunning) {
+      pauseButton.disabled = true;
+      stopButton.disabled = true;
+    }
   }
 }
 
@@ -87,6 +96,8 @@ async function startExport() {
     startButton.disabled = products.length === 0;
     pauseButton.disabled = true;
     stopButton.disabled = true;
+  } else {
+    backgroundRunning = true;
   }
 }
 
@@ -104,6 +115,9 @@ async function togglePause() {
 async function stopExport() {
   const response = await sendRuntimeMessage({ type: 'STOP_EXPORT' });
   if (!response.ok) status.textContent = '后台服务尚未就绪，已重置弹窗控制状态';
+  backgroundRunning = false;
+  paused = false;
+  pauseButton.textContent = '暂停';
   startButton.disabled = products.length === 0;
   pauseButton.disabled = true;
   stopButton.disabled = true;
@@ -111,8 +125,7 @@ async function stopExport() {
 
 async function requestState() {
   const response = await sendRuntimeMessage({ type: 'GET_STATE' });
-  const state = response.value;
-  if (state?.tasks?.length) renderProducts(state.tasks);
+  if (response.ok && response.value) applyState(response.value);
 }
 
 async function sendRuntimeMessage(message) {
@@ -125,12 +138,41 @@ async function sendRuntimeMessage(message) {
 
 function handleBackgroundMessage(message) {
   if (message.type === 'EXPORT_STATE') {
-    renderProducts(message.state.tasks);
-    status.textContent = message.state.message || '正在处理';
-    startButton.disabled = message.state.running;
-    pauseButton.disabled = !message.state.running;
-    stopButton.disabled = !message.state.running;
+    applyState(message.state);
   }
+}
+
+function applyState(state) {
+  if (!state) return;
+
+  const tasks = Array.isArray(state.tasks) ? state.tasks : null;
+  if (tasks) {
+    renderProducts(tasks);
+    if (tasks.length) products = tasks.map(toProduct);
+  }
+
+  if (typeof state.message === 'string') status.textContent = state.message;
+
+  backgroundRunning = Boolean(state.running);
+  paused = Boolean(state.paused);
+  pauseButton.textContent = paused ? '继续' : '暂停';
+
+  const hasKnownProducts = products.length > 0 || Boolean(tasks?.length);
+  startButton.disabled = backgroundRunning || !hasKnownProducts;
+  pauseButton.disabled = !backgroundRunning;
+  stopButton.disabled = !backgroundRunning;
+}
+
+function toProduct(task) {
+  return {
+    url: task.url,
+    domain: task.domain,
+    marketplace: task.marketplace,
+    marketplaceCode: task.marketplaceCode,
+    shopId: task.shopId,
+    itemId: task.itemId,
+    key: task.key
+  };
 }
 
 function renderProducts(tasks) {
