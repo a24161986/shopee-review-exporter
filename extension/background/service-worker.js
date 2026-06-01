@@ -3,6 +3,7 @@ importScripts(
   '../shared/shopee-sites.js',
   '../shared/url-parser.js',
   '../shared/review-filter.js',
+  '../shared/task-state.js',
   '../shared/reviews.js',
   '../shared/export-format.js',
   '../shared/xlsx-export.js'
@@ -65,6 +66,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     initializationPromise
       .then(() => stopExport())
       .finally(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (message.type === 'RETRY_FAILED') {
+    initializationPromise
+      .then(() => retryFailedTasks())
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
   }
 
@@ -152,12 +161,7 @@ async function stopExport() {
     state.paused = false;
     state.running = false;
     state.message = '已停止';
-
-    for (const task of state.tasks) {
-      if (task.status === 'pending' || task.status === 'running') {
-        task.status = 'stopped';
-      }
-    }
+    state.tasks = ShopeeReviewExporter.prepareTasksForStop(state.tasks);
 
     await closeCurrentTab();
     await clearQueueAlarm();
@@ -171,14 +175,45 @@ async function stopExport() {
   }
 }
 
+async function retryFailedTasks() {
+  if (state.running || state.currentTabId !== null) {
+    await stopExport();
+  }
+
+  const retryState = ShopeeReviewExporter.resetFailedTasksForRetry(state.tasks);
+  if (retryState.retryCount === 0) {
+    state.message = '没有失败任务可重试';
+    publishState();
+    return;
+  }
+
+  activeRunId += 1;
+  const runId = activeRunId;
+  state = {
+    running: true,
+    paused: false,
+    stopped: false,
+    currentTabId: null,
+    tasks: retryState.tasks.map((task) => task.retry
+      ? { ...task, retryRunId: runId, retry: false }
+      : { ...task, retry: false }),
+    message: `准备重试 ${retryState.retryCount} 个失败商品`
+  };
+  publishState();
+  continueQueue(runId);
+}
+
 async function runQueue(runId) {
+  const retryMode = state.tasks.some((task) => task.retryRunId === runId);
+
   for (const task of state.tasks) {
     if (!isActiveRun(runId) || state.stopped) break;
     await waitWhilePaused(runId);
     if (!isActiveRun(runId) || state.stopped) break;
-    if (task.status !== 'pending') continue;
+    if (task.status !== ShopeeReviewExporter.TASK_STATUS.PENDING) continue;
+    if (retryMode && task.retryRunId !== runId) continue;
 
-    task.status = 'running';
+    task.status = ShopeeReviewExporter.TASK_STATUS.RUNNING;
     task.error = '';
     state.message = `正在导出 ${task.marketplace} ${task.shopId}.${task.itemId}`;
     publishState();
@@ -186,13 +221,15 @@ async function runQueue(runId) {
     try {
       await processTask(runId, task);
       if (!isActiveRun(runId)) return;
-      task.status = 'done';
+      task.status = ShopeeReviewExporter.TASK_STATUS.DONE;
+      delete task.retryRunId;
       state.message = `已完成 ${task.shopId}.${task.itemId}`;
     } catch (error) {
       if (!isActiveRun(runId)) return;
-      task.status = state.stopped ? 'stopped' : 'failed';
+      task.status = ShopeeReviewExporter.TASK_STATUS.FAILED;
       task.error = error.message || String(error);
-      state.message = state.stopped ? '已停止' : `导出失败：${task.error}`;
+      delete task.retryRunId;
+      state.message = `导出失败：${task.error}`;
     } finally {
       if (isActiveRun(runId)) {
         await closeCurrentTab();
@@ -203,9 +240,11 @@ async function runQueue(runId) {
 
   if (!isActiveRun(runId)) return;
 
+  const summary = ShopeeReviewExporter.summarizeTasks(state.tasks);
   state.running = false;
   state.paused = false;
-  state.message = state.stopped ? '已停止' : '全部任务完成';
+  state.stopped = false;
+  state.message = `导出完成：成功 ${summary.done} 个，失败 ${summary.failed} 个`;
   await clearQueueAlarm();
   publishState();
 }
@@ -430,15 +469,20 @@ async function initializeFromStorage() {
     paused: Boolean(saved.paused),
     stopped: Boolean(saved.stopped),
     currentTabId: null,
-    tasks: Array.isArray(saved.tasks) ? saved.tasks : [],
+    tasks: Array.isArray(saved.tasks)
+      ? saved.tasks.map((task) => ({
+        ...task,
+        status: ShopeeReviewExporter.normalizeTaskStatus(task.status)
+      }))
+      : [],
     message: saved.message || '就绪'
   };
 
   if (state.running && !state.stopped) {
     activeRunId += 1;
     for (const task of state.tasks) {
-      if (task.status === 'running') {
-        task.status = 'pending';
+      if (task.status === ShopeeReviewExporter.TASK_STATUS.RUNNING) {
+        task.status = ShopeeReviewExporter.TASK_STATUS.PENDING;
       }
     }
     state.message = '恢复导出队列';
