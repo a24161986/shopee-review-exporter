@@ -2,6 +2,7 @@ importScripts(
   '../lib/fflate.min.js',
   '../shared/shopee-sites.js',
   '../shared/url-parser.js',
+  '../shared/review-filter.js',
   '../shared/reviews.js',
   '../shared/export-format.js',
   '../shared/xlsx-export.js'
@@ -84,13 +85,16 @@ async function startExport(products, settings) {
 
   const target = clampCount(settings.count);
   const format = settings.format === 'json' ? 'json' : 'xlsx';
+  const reviewFilter = resolveReviewFilter(settings.reviewFilter ?? settings.filter);
   const tasks = products.map((product, index) => ({
     ...product,
     id: `${product.key || `${product.domain}:${product.shopId}:${product.itemId}`}:${index}`,
     status: 'pending',
     fetched: 0,
     target,
-    filter: Number(settings.filter || 0),
+    reviewFilter: reviewFilter.reviewFilter,
+    filter: reviewFilter.filter,
+    ratingType: reviewFilter.type,
     format,
     error: ''
   }));
@@ -278,16 +282,17 @@ async function processTask(runId, task) {
 }
 
 async function fetchReviewPage(tabId, task, offset, limit) {
+  const reviewFilter = resolveReviewFilter(task.reviewFilter ?? task.filter);
   const apiPath = [
     '/api/v2/item/get_ratings?',
-    `exclude_filter=1&filter=${encodeURIComponent(task.filter)}`,
+    `exclude_filter=1&filter=${encodeURIComponent(reviewFilter.filter)}`,
     '&filter_size=0&flag=1&fold_filter=0',
     `&itemid=${encodeURIComponent(task.itemId)}`,
     `&limit=${encodeURIComponent(limit)}`,
     `&offset=${encodeURIComponent(offset)}`,
     '&relevant_reviews=false&request_source=2',
     `&shopid=${encodeURIComponent(task.shopId)}`,
-    '&tag_filter=&type=0'
+    `&tag_filter=&type=${encodeURIComponent(task.ratingType ?? reviewFilter.type)}`
   ].join('');
 
   const [result] = await chrome.scripting.executeScript({
@@ -404,6 +409,10 @@ function clampCount(value) {
   const number = Number(value || 100);
   if (!Number.isFinite(number)) return 100;
   return Math.max(1, Math.min(5000, Math.floor(number)));
+}
+
+function resolveReviewFilter(value) {
+  return ShopeeReviewExporter.resolveReviewFilter(value);
 }
 
 function sleep(ms) {

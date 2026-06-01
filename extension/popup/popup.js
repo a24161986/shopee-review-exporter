@@ -65,7 +65,7 @@ function getSettings() {
   return {
     format: formatSelect.value,
     count: Math.max(1, Math.min(5000, Number(countInput.value || 100))),
-    filter: Number(filterSelect.value || 0)
+    reviewFilter: normalizeReviewFilterValue(filterSelect.value)
   };
 }
 
@@ -78,7 +78,19 @@ async function restoreSettings() {
   if (!exportSettings) return;
   formatSelect.value = exportSettings.format || 'xlsx';
   countInput.value = exportSettings.count || 100;
-  filterSelect.value = String(exportSettings.filter ?? 0);
+  filterSelect.value = resolveStoredReviewFilter(exportSettings);
+}
+
+function normalizeReviewFilterValue(value) {
+  return ShopeeReviewExporter.normalizeReviewFilterValue(value);
+}
+
+function resolveStoredReviewFilter(exportSettings) {
+  if (exportSettings.reviewFilter !== null && typeof exportSettings.reviewFilter !== 'undefined') {
+    return normalizeReviewFilterValue(exportSettings.reviewFilter);
+  }
+
+  return ShopeeReviewExporter.resolveReviewFilter(exportSettings.filter).reviewFilter;
 }
 
 async function startExport() {

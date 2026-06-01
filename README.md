@@ -31,6 +31,8 @@ npm run verify
 - Confirm duplicate Shopee links appear only once.
 - Export Excel with the default count of 100 reviews.
 - Export JSON with a smaller count such as 5 reviews.
+- Confirm the image/video filter exports only media reviews.
+- Confirm a star filter such as 5 星 exports that rating instead of all ratings.
 - Confirm exported reviews are sorted newest to oldest by review time.
 - Confirm each product downloads as a separate file.
 - Confirm pause stops progress before the next API page or next product.
