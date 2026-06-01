@@ -49,7 +49,7 @@
     "test": "node --test tests/*.test.js",
     "validate:manifest": "node scripts/validate-manifest.js",
     "prepare:vendor": "mkdir -p extension/lib && cp node_modules/fflate/umd/index.js extension/lib/fflate.min.js",
-    "verify": "npm run test && npm run validate:manifest"
+    "verify": "npm run prepare:vendor && npm run test && npm run validate:manifest"
   },
   "devDependencies": {
     "fflate": "^0.8.2"
@@ -121,6 +121,8 @@ npm run verify
 Run: `npm install`
 
 Expected: `node_modules` and `package-lock.json` are created.
+
+Note: the `verify` script runs `prepare:vendor` before tests and manifest validation, so `extension/lib/fflate.min.js` is generated automatically during full verification after the manifest and tests exist.
 
 - [ ] **Step 5: Commit harness**
 
@@ -725,6 +727,8 @@ git commit -m "feat: format exported review files"
 Run: `npm run prepare:vendor`
 
 Expected: `extension/lib/fflate.min.js` exists.
+
+This generated vendor file is committed in Task 5 together with the manifest and content scanner, because that is when the extension runtime files are first added.
 
 - [ ] **Step 4: Validate manifest**
 
@@ -1505,6 +1509,7 @@ git commit -m "feat: export reviews from background queue"
 Run: `npm run verify`
 
 Expected: all tests pass and manifest validation passes.
+The `verify` script also refreshes `extension/lib/fflate.min.js` via `prepare:vendor` before running those checks.
 
 - [ ] **Step 2: Add manual QA notes to `README.md`**
 
@@ -1527,6 +1532,7 @@ Expected: all tests pass and manifest validation passes.
 Run: `npm run verify`
 
 Expected: all tests pass and manifest validation passes.
+The `verify` script also refreshes `extension/lib/fflate.min.js` via `prepare:vendor` before running those checks.
 
 - [ ] **Step 4: Commit verification docs**
 
