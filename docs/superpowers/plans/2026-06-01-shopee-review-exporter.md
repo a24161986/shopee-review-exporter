@@ -6,7 +6,7 @@
 
 **Architecture:** The popup injects a scanner into the active tab, lists deduplicated Shopee product links, and sends selected products plus settings to the background service worker. The service worker processes a single-product queue, opens each product in an inactive tab, executes a review API request in that page, normalizes and sorts reviews newest-first, then downloads one file per product. Shared plain JavaScript modules hold parsing, normalization, sorting, and filename behavior so they can run in Chrome and in Node tests.
 
-**Tech Stack:** Chrome Manifest V3, vanilla HTML/CSS/JavaScript, Node built-in test runner, SheetJS `xlsx` copied locally into the extension.
+**Tech Stack:** Chrome Manifest V3, vanilla HTML/CSS/JavaScript, Node built-in test runner, `fflate` copied locally into the extension for creating the zip container used by `.xlsx` files.
 
 ---
 
@@ -48,11 +48,11 @@
   "scripts": {
     "test": "node --test tests/*.test.js",
     "validate:manifest": "node scripts/validate-manifest.js",
-    "prepare:xlsx": "mkdir -p extension/lib && cp node_modules/xlsx/dist/xlsx.full.min.js extension/lib/xlsx.full.min.js",
+    "prepare:vendor": "mkdir -p extension/lib && cp node_modules/fflate/umd/index.js extension/lib/fflate.min.js",
     "verify": "npm run test && npm run validate:manifest"
   },
   "devDependencies": {
-    "xlsx": "^0.18.5"
+    "fflate": "^0.8.2"
   }
 }
 ```
@@ -96,7 +96,7 @@ Chrome extension for scanning the current tab for Shopee product links and expor
 
 ```bash
 npm install
-npm run prepare:xlsx
+npm run prepare:vendor
 npm run verify
 ```
 
@@ -720,11 +720,11 @@ git commit -m "feat: format exported review files"
 })(typeof globalThis !== 'undefined' ? globalThis : window);
 ```
 
-- [ ] **Step 3: Copy SheetJS into extension**
+- [ ] **Step 3: Copy vendored fflate into extension**
 
-Run: `npm run prepare:xlsx`
+Run: `npm run prepare:vendor`
 
-Expected: `extension/lib/xlsx.full.min.js` exists.
+Expected: `extension/lib/fflate.min.js` exists.
 
 - [ ] **Step 4: Validate manifest**
 
@@ -735,7 +735,7 @@ Expected: PASS with `Manifest validation passed.`
 - [ ] **Step 5: Commit manifest and content scanner**
 
 ```bash
-git add extension/manifest.json extension/content/content.js extension/lib/xlsx.full.min.js
+git add extension/manifest.json extension/content/content.js extension/lib/fflate.min.js
 git commit -m "feat: add extension manifest and scanner"
 ```
 
@@ -1134,7 +1134,7 @@ git commit -m "feat: add popup export workflow"
 
 ```js
 importScripts(
-  '../lib/xlsx.full.min.js',
+  '../lib/fflate.min.js',
   '../shared/shopee-sites.js',
   '../shared/reviews.js',
   '../shared/export-format.js'
@@ -1314,24 +1314,110 @@ async function downloadRows(task, rows) {
 }
 
 function excelDataUrl(rows) {
-  const worksheet = XLSX.utils.json_to_sheet(ShopeeReviewExporter.toExcelRows(rows));
-  worksheet['!cols'] = [
-    { wch: 36 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 8 },
-    { wch: 48 },
-    { wch: 24 },
-    { wch: 20 },
-    { wch: 48 },
-    { wch: 48 }
+  const rowsForExcel = ShopeeReviewExporter.toExcelRows(rows);
+  const headers = rowsForExcel.length ? Object.keys(rowsForExcel[0]) : [
+    '商品链接',
+    '站点',
+    '店铺ID',
+    '商品ID',
+    '评论人',
+    '评分',
+    '评论内容',
+    '规格/变体',
+    '评论时间',
+    '图片链接',
+    '视频链接'
   ];
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Reviews');
-  const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+  const sheetRows = [headers, ...rowsForExcel.map((row) => headers.map((header) => row[header] ?? ''))];
+  const files = buildXlsxFiles(sheetRows);
+  const zipped = fflate.zipSync(files);
+  const base64 = uint8ToBase64(zipped);
   return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
+}
+
+function buildXlsxFiles(sheetRows) {
+  return {
+    '[Content_Types].xml': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`),
+    '_rels/.rels': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`),
+    'xl/_rels/workbook.xml.rels': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`),
+    'xl/workbook.xml': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Reviews" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`),
+    'xl/styles.xml': fflate.strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`),
+    'xl/worksheets/sheet1.xml': fflate.strToU8(buildWorksheetXml(sheetRows))
+  };
+}
+
+function buildWorksheetXml(rows) {
+  const columnWidths = [36, 14, 14, 14, 18, 8, 48, 24, 20, 48, 48]
+    .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
+    .join('');
+  const rowXml = rows.map((row, rowIndex) => {
+    const cells = row.map((value, columnIndex) => {
+      const ref = `${columnName(columnIndex + 1)}${rowIndex + 1}`;
+      return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+    }).join('');
+    return `<row r="${rowIndex + 1}">${cells}</row>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <cols>${columnWidths}</cols>
+  <sheetData>${rowXml}</sheetData>
+</worksheet>`;
+}
+
+function columnName(number) {
+  let name = '';
+  while (number > 0) {
+    const modulo = (number - 1) % 26;
+    name = String.fromCharCode(65 + modulo) + name;
+    number = Math.floor((number - modulo) / 26);
+  }
+  return name;
+}
+
+function escapeXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function uint8ToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
 }
 
 async function waitForTabComplete(tabId) {
@@ -1472,4 +1558,3 @@ Type consistency:
 - Product objects consistently use `url`, `domain`, `marketplace`, `marketplaceCode`, `shopId`, `itemId`, and `key`.
 - Review rows consistently use `productUrl`, `marketplace`, `domain`, `shopId`, `itemId`, `reviewerUsername`, `rating`, `comment`, `modelName`, `reviewTime`, `createdAt`, `imageUrls`, and `videoUrls`.
 - Popup and background message types consistently use `START_EXPORT`, `PAUSE_EXPORT`, `RESUME_EXPORT`, `STOP_EXPORT`, `GET_STATE`, and `EXPORT_STATE`.
-

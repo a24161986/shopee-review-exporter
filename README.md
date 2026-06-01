@@ -6,7 +6,7 @@ Chrome extension for scanning the current tab for Shopee product links and expor
 
 ```bash
 npm install
-npm run prepare:xlsx
+npm run prepare:vendor
 npm run verify
 ```
 
