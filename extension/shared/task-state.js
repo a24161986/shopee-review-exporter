@@ -56,12 +56,13 @@
     let retryCount = 0;
     const resetTasks = tasks.map((task) => {
       const status = normalizeTaskStatus(task?.status);
+      const { retryRunId, ...taskWithoutRetryRunId } = task || {};
       if (status !== TASK_STATUS.FAILED) {
-        return { ...task, status, retry: false };
+        return { ...taskWithoutRetryRunId, status, retry: false };
       }
       retryCount += 1;
       return {
-        ...task,
+        ...taskWithoutRetryRunId,
         status: TASK_STATUS.PENDING,
         fetched: 0,
         error: '',

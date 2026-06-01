@@ -64,9 +64,9 @@ test('prepareTasksForStop keeps done failed and pending, marks running failed', 
 
 test('resetFailedTasksForRetry requeues only failed tasks and reports retry count', () => {
   const result = resetFailedTasksForRetry([
-    { id: 'a', status: 'done', fetched: 10, error: '' },
-    { id: 'b', status: 'failed', fetched: 3, error: 'HTTP 403' },
-    { id: 'c', status: 'pending', fetched: 0, error: '' }
+    { id: 'a', status: 'done', fetched: 10, error: '', retryRunId: 41 },
+    { id: 'b', status: 'failed', fetched: 3, error: 'HTTP 403', retryRunId: 42 },
+    { id: 'c', status: 'pending', fetched: 0, error: '', retryRunId: 43 }
   ]);
 
   assert.equal(result.retryCount, 1);
@@ -80,6 +80,11 @@ test('resetFailedTasksForRetry requeues only failed tasks and reports retry coun
     { id: 'a', status: 'done', fetched: 10, error: '', retry: false },
     { id: 'b', status: 'pending', fetched: 0, error: '', retry: true },
     { id: 'c', status: 'pending', fetched: 0, error: '', retry: false }
+  ]);
+  assert.deepEqual(result.tasks.map((task) => Object.hasOwn(task, 'retryRunId')), [
+    false,
+    false,
+    false
   ]);
 });
 

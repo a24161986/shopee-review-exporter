@@ -32,6 +32,7 @@ test('background retries failed tasks with simplified task statuses', () => {
   assert.equal(serviceWorker.includes("state.stopped ? 'stopped' : 'failed'"), false);
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.prepareTasksForStop(state.tasks)'), true);
   assert.match(serviceWorker, /async function retryFailedTasks\(\) \{[\s\S]*ShopeeReviewExporter\.resetFailedTasksForRetry\(state\.tasks\)[\s\S]*retryRunId/);
+  assert.match(serviceWorker, /const \{ retryRunId, \.\.\.taskWithoutRetryRunId \} = task;/);
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.TASK_STATUS.PENDING'), true);
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.TASK_STATUS.RUNNING'), true);
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.TASK_STATUS.DONE'), true);

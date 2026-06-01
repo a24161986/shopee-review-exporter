@@ -194,9 +194,12 @@ async function retryFailedTasks() {
     paused: false,
     stopped: false,
     currentTabId: null,
-    tasks: retryState.tasks.map((task) => task.retry
-      ? { ...task, retryRunId: runId, retry: false }
-      : { ...task, retry: false }),
+    tasks: retryState.tasks.map((task) => {
+      const { retryRunId, ...taskWithoutRetryRunId } = task;
+      return task.retry
+        ? { ...taskWithoutRetryRunId, retryRunId: runId, retry: false }
+        : { ...taskWithoutRetryRunId, retry: false };
+    }),
     message: `准备重试 ${retryState.retryCount} 个失败商品`
   };
   publishState();
