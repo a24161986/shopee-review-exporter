@@ -9,7 +9,10 @@
 
   function scanCurrentPage() {
     const parser = global.ShopeeReviewExporter;
-    const products = parser.extractShopeeProductLinks(collectPageText());
+    const currentProduct = parser.parseShopeeProductUrl(location.href);
+    const products = currentProduct
+      ? [currentProduct]
+      : parser.extractShopeeProductLinks(collectPageText());
     return {
       pageUrl: location.href,
       pageTitle: document.title,
