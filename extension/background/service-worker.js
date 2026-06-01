@@ -483,11 +483,7 @@ async function initializeFromStorage() {
 
   if (state.running && !state.stopped) {
     activeRunId += 1;
-    for (const task of state.tasks) {
-      if (task.status === ShopeeReviewExporter.TASK_STATUS.RUNNING) {
-        task.status = ShopeeReviewExporter.TASK_STATUS.PENDING;
-      }
-    }
+    state.tasks = ShopeeReviewExporter.prepareTasksForRestore(state.tasks, activeRunId);
     state.message = '恢复导出队列';
     publishState();
 

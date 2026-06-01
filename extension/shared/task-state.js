@@ -42,13 +42,30 @@
   function prepareTasksForStop(tasks = []) {
     return tasks.map((task) => {
       const status = normalizeTaskStatus(task?.status);
-      if (status === TASK_STATUS.RUNNING) {
-        return { ...task, status: TASK_STATUS.FAILED, error: '已停止' };
+      const { retryRunId, ...taskWithoutRetryRunId } = task || {};
+      const retrySelected = retryRunId !== null && typeof retryRunId !== 'undefined';
+      if (status === TASK_STATUS.RUNNING || (status === TASK_STATUS.PENDING && retrySelected)) {
+        return { ...taskWithoutRetryRunId, status: TASK_STATUS.FAILED, error: '已停止' };
       }
       if (task?.status === 'stopped') {
-        return { ...task, status: TASK_STATUS.FAILED, error: task.error || '已停止' };
+        return { ...taskWithoutRetryRunId, status: TASK_STATUS.FAILED, error: task.error || '已停止' };
       }
-      return { ...task, status };
+      return { ...taskWithoutRetryRunId, status };
+    });
+  }
+
+  function prepareTasksForRestore(tasks = [], runId) {
+    return tasks.map((task) => {
+      const status = normalizeTaskStatus(task?.status);
+      const restoredStatus = status === TASK_STATUS.RUNNING
+        ? TASK_STATUS.PENDING
+        : status;
+      const { retryRunId, ...taskWithoutRetryRunId } = task || {};
+      const retrySelected = retryRunId !== null && typeof retryRunId !== 'undefined';
+      if (retrySelected && (status === TASK_STATUS.PENDING || status === TASK_STATUS.RUNNING)) {
+        return { ...taskWithoutRetryRunId, status: restoredStatus, retryRunId: runId };
+      }
+      return { ...taskWithoutRetryRunId, status: restoredStatus };
     });
   }
 
@@ -83,6 +100,7 @@
     statusLabel,
     summarizeTasks,
     prepareTasksForStop,
+    prepareTasksForRestore,
     resetFailedTasksForRetry,
     hasFailedTasks
   };

@@ -6,6 +6,7 @@ const {
   statusLabel,
   summarizeTasks,
   prepareTasksForStop,
+  prepareTasksForRestore,
   resetFailedTasksForRetry,
   hasFailedTasks
 } = require('../extension/shared/task-state.js');
@@ -59,6 +60,48 @@ test('prepareTasksForStop keeps done failed and pending, marks running failed', 
     { id: 'c', status: 'failed', error: '已停止' },
     { id: 'd', status: 'pending', error: '' },
     { id: 'e', status: 'failed', error: '已停止' }
+  ]);
+});
+
+test('prepareTasksForStop marks retry-selected pending tasks failed and clears retry markers', () => {
+  const tasks = prepareTasksForStop([
+    { id: 'a', status: 'pending', fetched: 0, error: '', retryRunId: 12 },
+    { id: 'b', status: 'running', fetched: 3, error: '', retryRunId: 12 },
+    { id: 'c', status: 'pending', fetched: 0, error: '' }
+  ]);
+
+  assert.deepEqual(tasks.map((task) => ({
+    id: task.id,
+    status: task.status,
+    error: task.error,
+    hasRetryRunId: Object.hasOwn(task, 'retryRunId')
+  })), [
+    { id: 'a', status: 'failed', error: '已停止', hasRetryRunId: false },
+    { id: 'b', status: 'failed', error: '已停止', hasRetryRunId: false },
+    { id: 'c', status: 'pending', error: '', hasRetryRunId: false }
+  ]);
+});
+
+test('prepareTasksForRestore rewrites retry markers and leaves non-selected pending tasks unmarked', () => {
+  const tasks = prepareTasksForRestore([
+    { id: 'a', status: 'done', fetched: 10, error: '' },
+    { id: 'b', status: 'running', fetched: 3, error: '', retryRunId: 12 },
+    { id: 'c', status: 'pending', fetched: 0, error: '', retryRunId: 12 },
+    { id: 'd', status: 'pending', fetched: 0, error: '' },
+    { id: 'e', status: 'done', fetched: 8, error: '', retryRunId: 12 }
+  ], 34);
+
+  assert.deepEqual(tasks.map((task) => ({
+    id: task.id,
+    status: task.status,
+    retryRunId: task.retryRunId,
+    hasRetryRunId: Object.hasOwn(task, 'retryRunId')
+  })), [
+    { id: 'a', status: 'done', retryRunId: undefined, hasRetryRunId: false },
+    { id: 'b', status: 'pending', retryRunId: 34, hasRetryRunId: true },
+    { id: 'c', status: 'pending', retryRunId: 34, hasRetryRunId: true },
+    { id: 'd', status: 'pending', retryRunId: undefined, hasRetryRunId: false },
+    { id: 'e', status: 'done', retryRunId: undefined, hasRetryRunId: false }
   ]);
 });
 

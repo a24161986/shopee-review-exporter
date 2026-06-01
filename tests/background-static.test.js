@@ -41,6 +41,7 @@ test('background retries failed tasks with simplified task statuses', () => {
 
 test('background normalizes restored statuses and reports final queue summary', () => {
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.normalizeTaskStatus(task.status)'), true);
+  assert.equal(serviceWorker.includes('ShopeeReviewExporter.prepareTasksForRestore(state.tasks, activeRunId)'), true);
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.summarizeTasks(state.tasks)'), true);
   assert.equal(serviceWorker.includes('全部任务完成'), false);
 });
