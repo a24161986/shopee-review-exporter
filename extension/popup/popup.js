@@ -148,7 +148,7 @@ function applyState(state) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : null;
   if (tasks) {
     renderProducts(tasks);
-    if (tasks.length) products = tasks.map(toProduct);
+    products = tasks.map(({ error, fetched, status, target, ...product }) => product);
   }
 
   if (typeof state.message === 'string') status.textContent = state.message;
@@ -157,22 +157,9 @@ function applyState(state) {
   paused = Boolean(state.paused);
   pauseButton.textContent = paused ? '继续' : '暂停';
 
-  const hasKnownProducts = products.length > 0 || Boolean(tasks?.length);
-  startButton.disabled = backgroundRunning || !hasKnownProducts;
+  startButton.disabled = backgroundRunning || products.length === 0;
   pauseButton.disabled = !backgroundRunning;
   stopButton.disabled = !backgroundRunning;
-}
-
-function toProduct(task) {
-  return {
-    url: task.url,
-    domain: task.domain,
-    marketplace: task.marketplace,
-    marketplaceCode: task.marketplaceCode,
-    shopId: task.shopId,
-    itemId: task.itemId,
-    key: task.key
-  };
 }
 
 function renderProducts(tasks) {
