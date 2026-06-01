@@ -1,0 +1,158 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 430px;
+  margin: 0;
+  color: #1f2933;
+  background: #f7f8fa;
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.popup-shell {
+  padding: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+h1 {
+  margin: 0;
+  color: #ee4d2d;
+  font-size: 17px;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+}
+
+.settings label {
+  display: grid;
+  gap: 5px;
+  font-weight: 600;
+}
+
+.settings label:first-child {
+  grid-column: span 2;
+}
+
+select,
+input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #cfd6dd;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  color: #1f2933;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.button {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary {
+  color: #fff;
+  background: #ee4d2d;
+}
+
+.secondary {
+  color: #1f2933;
+  background: #fff;
+  border-color: #cfd6dd;
+}
+
+.danger {
+  color: #b42318;
+  background: #fff;
+  border-color: #f2b8b5;
+}
+
+.summary,
+.status {
+  color: #52616f;
+  margin-bottom: 8px;
+}
+
+.task-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.task {
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+}
+
+.task-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.task-title span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-url {
+  margin-top: 4px;
+  color: #697987;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-progress {
+  margin-top: 6px;
+  color: #52616f;
+}
+
+.status-running {
+  color: #ee4d2d;
+}
+
+.status-done {
+  color: #16803c;
+}
+
+.status-failed,
+.status-stopped {
+  color: #b42318;
+}

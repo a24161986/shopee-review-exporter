@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shopee 评论导出</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup-shell">
+    <header class="header">
+      <h1>Shopee 评论导出</h1>
+      <button id="scanButton" class="button secondary" type="button">扫描当前页</button>
+    </header>
+
+    <section class="settings" aria-label="导出设置">
+      <label>
+        导出格式
+        <select id="formatSelect">
+          <option value="xlsx">Excel (.xlsx)</option>
+          <option value="json">JSON (.json)</option>
+        </select>
+      </label>
+
+      <label>
+        每个商品评论条数
+        <input id="countInput" type="number" min="1" max="5000" value="100">
+      </label>
+
+      <label>
+        评论筛选
+        <select id="filterSelect">
+          <option value="0">全部评论</option>
+          <option value="1">带图/视频</option>
+          <option value="5">5 星</option>
+          <option value="4">4 星</option>
+          <option value="3">3 星</option>
+          <option value="2">2 星</option>
+          <option value="11">1 星</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="actions">
+      <button id="startButton" class="button primary" type="button" disabled>开始导出</button>
+      <button id="pauseButton" class="button secondary" type="button" disabled>暂停</button>
+      <button id="stopButton" class="button danger" type="button" disabled>停止</button>
+    </section>
+
+    <section class="summary" id="summary">尚未扫描</section>
+    <section class="task-list" id="taskList" aria-label="商品任务列表"></section>
+    <footer class="status" id="status">就绪</footer>
+  </main>
+
+  <script src="../shared/shopee-sites.js"></script>
+  <script src="../shared/url-parser.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
