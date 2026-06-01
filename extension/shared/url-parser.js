@@ -15,6 +15,14 @@
     }
   }
 
+  function normalizePathname(pathname) {
+    try {
+      return decodeURIComponent(pathname).replace(/\/+$/g, '');
+    } catch {
+      return null;
+    }
+  }
+
   function parseShopeeProductUrl(input) {
     const parsedUrl = normalizeUrlInput(input);
     if (!parsedUrl) return null;
@@ -23,7 +31,9 @@
     const market = siteApi.getMarketByDomain(domain);
     if (!market) return null;
 
-    const pathname = decodeURIComponent(parsedUrl.pathname).replace(/\/+$/g, '');
+    const pathname = normalizePathname(parsedUrl.pathname);
+    if (!pathname) return null;
+
     const productPathMatch = pathname.match(/\/product\/(\d+)\/(\d+)$/);
     const dotMatch = pathname.match(/\.([0-9]+)\.([0-9]+)$/);
     const match = productPathMatch || dotMatch;

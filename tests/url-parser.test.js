@@ -33,6 +33,17 @@ test('rejects non-Shopee and non-product URLs', () => {
   assert.equal(parseShopeeProductUrl('https://shopee.sg/search?keyword=bag'), null);
 });
 
+test('rejects malformed encoded Shopee URLs without throwing', () => {
+  assert.doesNotThrow(() => {
+    assert.equal(parseShopeeProductUrl('https://shopee.sg/bad%ZZ.1.2'), null);
+  });
+
+  const products = extractShopeeProductLinks('before https://shopee.sg/bad%ZZ.1.2 after https://shopee.sg/good.1.2');
+  assert.deepEqual(products.map((product) => product.key), [
+    'shopee.sg:1:2'
+  ]);
+});
+
 test('extracts and deduplicates product links from text', () => {
   const text = [
     'https://shopee.sg/item-name.10.20',
