@@ -1,6 +1,11 @@
 (function attachExportFormat(global) {
   function safePart(value) {
-    return String(value || 'unknown').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    return String(value || 'unknown').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'unknown';
+  }
+
+  function safeExtension(extension) {
+    const normalized = String(extension || '').toLowerCase();
+    return normalized === 'xlsx' || normalized === 'json' ? normalized : 'json';
   }
 
   function buildDownloadFilename(product, reviewCount, extension) {
@@ -13,7 +18,7 @@
       '_',
       Number(reviewCount || 0),
       '-reviews.',
-      extension
+      safeExtension(extension)
     ].join('');
   }
 

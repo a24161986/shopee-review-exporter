@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   buildDownloadFilename,
+  jsonDataUrl,
   toExcelRows,
   toJsonText
 } = require('../extension/shared/export-format.js');
@@ -14,6 +15,18 @@ test('buildDownloadFilename includes marketplace, ids, count, and extension', ()
   }, 99, 'xlsx');
 
   assert.equal(filename, 'shopee-my_123_456_99-reviews.xlsx');
+});
+
+test('buildDownloadFilename sanitizes empty parts and unsafe extensions', () => {
+  const filename = buildDownloadFilename({
+    marketplaceCode: '///',
+    shopId: '中文',
+    itemId: '456'
+  }, 1, '../json');
+
+  assert.equal(filename, 'shopee-unknown_unknown_456_1-reviews.json');
+  assert.equal(filename.includes('/'), false);
+  assert.equal(filename.includes('..'), false);
 });
 
 test('toExcelRows maps internal keys to Chinese column labels', () => {
@@ -49,4 +62,13 @@ test('toExcelRows maps internal keys to Chinese column labels', () => {
 test('toJsonText omits internal createdAt and formats stable JSON', () => {
   const text = toJsonText([{ productUrl: 'u', createdAt: 1, comment: 'c' }]);
   assert.equal(text, '[\n  {\n    "productUrl": "u",\n    "comment": "c"\n  }\n]');
+});
+
+test('jsonDataUrl encodes formatted JSON text', () => {
+  const rows = [{ productUrl: 'u', comment: '中文\n"quoted"', createdAt: 1 }];
+  const dataUrl = jsonDataUrl(rows);
+  const prefix = 'data:application/json;charset=utf-8,';
+
+  assert.equal(dataUrl.startsWith(prefix), true);
+  assert.equal(decodeURIComponent(dataUrl.slice(prefix.length)), toJsonText(rows));
 });
