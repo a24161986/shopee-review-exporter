@@ -25,28 +25,14 @@ chrome.runtime.onMessage.addListener(handleBackgroundMessage);
 restoreSettings();
 requestState();
 
-async function getActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) throw new Error('找不到当前标签页');
-  return tab;
-}
-
 async function scanCurrentTab() {
   try {
-    status.textContent = '正在扫描当前页...';
-    const tab = await getActiveTab();
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['shared/shopee-sites.js', 'shared/url-parser.js', 'content/content.js']
-    });
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => window.ShopeeReviewExporter.scanCurrentPage()
-    });
-    products = result?.result?.products || [];
+    status.textContent = '正在扫描当前窗口标签页...';
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    products = ShopeeReviewExporter.productsFromTabs(tabs);
     renderProducts(products.map((product) => ({ ...product, status: 'pending', fetched: 0, target: getSettings().count })));
     summary.textContent = `找到 ${products.length} 个 Shopee 商品链接`;
-    status.textContent = products.length ? '扫描完成' : '当前页没有可识别的 Shopee 商品链接';
+    status.textContent = products.length ? '扫描完成' : '当前窗口没有可识别的 Shopee 商品链接';
     startButton.disabled = backgroundRunning || products.length === 0;
   } catch (error) {
     products = [];
