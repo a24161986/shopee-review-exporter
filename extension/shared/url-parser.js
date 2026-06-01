@@ -35,7 +35,7 @@
     if (!pathname) return null;
 
     const productPathMatch = pathname.match(/\/product\/(\d+)\/(\d+)$/);
-    const dotMatch = pathname.match(/\.([0-9]+)\.([0-9]+)$/);
+    const dotMatch = pathname.match(/(?:^|[-/])i\.([0-9]+)\.([0-9]+)$/);
     const match = productPathMatch || dotMatch;
     if (!match) return null;
 

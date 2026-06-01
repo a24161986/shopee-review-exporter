@@ -31,14 +31,16 @@ test('parses Shopee product path URLs', () => {
 test('rejects non-Shopee and non-product URLs', () => {
   assert.equal(parseShopeeProductUrl('https://example.com/product/1/2'), null);
   assert.equal(parseShopeeProductUrl('https://shopee.sg/search?keyword=bag'), null);
+  assert.equal(parseShopeeProductUrl('https://shopee.sg/Small-Kitchen-Appliances-cat.11027421.11027457'), null);
+  assert.equal(parseShopeeProductUrl('https://shopee.sg/not-a-product.10.20'), null);
 });
 
 test('rejects malformed encoded Shopee URLs without throwing', () => {
   assert.doesNotThrow(() => {
-    assert.equal(parseShopeeProductUrl('https://shopee.sg/bad%ZZ.1.2'), null);
+    assert.equal(parseShopeeProductUrl('https://shopee.sg/bad%ZZ-i.1.2'), null);
   });
 
-  const products = extractShopeeProductLinks('before https://shopee.sg/bad%ZZ.1.2 after https://shopee.sg/good.1.2');
+  const products = extractShopeeProductLinks('before https://shopee.sg/bad%ZZ-i.1.2 after https://shopee.sg/good-i.1.2');
   assert.deepEqual(products.map((product) => product.key), [
     'shopee.sg:1:2'
   ]);
@@ -46,8 +48,8 @@ test('rejects malformed encoded Shopee URLs without throwing', () => {
 
 test('extracts and deduplicates product links from text', () => {
   const text = [
-    'https://shopee.sg/item-name.10.20',
-    'https://shopee.sg/item-name.10.20?utm_source=x',
+    'https://shopee.sg/item-name-i.10.20',
+    'https://shopee.sg/item-name-i.10.20?utm_source=x',
     'https://shopee.vn/product/30/40'
   ].join(' ');
   const products = extractShopeeProductLinks(text);
@@ -60,8 +62,8 @@ test('extracts and deduplicates product links from text', () => {
 
 test('dedupeProducts keeps first product for each domain shop and item tuple', () => {
   const products = dedupeProducts([
-    parseShopeeProductUrl('https://shopee.ph/a.1.2'),
-    parseShopeeProductUrl('https://shopee.ph/b.1.2'),
+    parseShopeeProductUrl('https://shopee.ph/a-i.1.2'),
+    parseShopeeProductUrl('https://shopee.ph/b-i.1.2'),
     parseShopeeProductUrl('https://shopee.tw/product/1/2')
   ]);
   assert.deepEqual(products.map((product) => product.key), [

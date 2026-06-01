@@ -1,9 +1,10 @@
 (function attachContentScanner(global) {
   function collectPageText() {
+    const currentUrl = location?.href || '';
     const anchorText = Array.from(document.querySelectorAll('a[href]'))
       .map((anchor) => anchor.href)
       .join('\n');
-    return `${anchorText}\n${document.body?.innerText || ''}`;
+    return `${currentUrl}\n${anchorText}\n${document.body?.innerText || ''}`;
   }
 
   function scanCurrentPage() {
