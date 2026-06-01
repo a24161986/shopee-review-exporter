@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Review Exporter",
+  "version": "0.1.0",
+  "description": "Scan the current tab for Shopee product links and export product reviews to Excel or JSON.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://shopee.sg/*",
+    "*://*.shopee.sg/*",
+    "*://shopee.com.my/*",
+    "*://*.shopee.com.my/*",
+    "*://shopee.co.id/*",
+    "*://*.shopee.co.id/*",
+    "*://shopee.co.th/*",
+    "*://*.shopee.co.th/*",
+    "*://shopee.ph/*",
+    "*://*.shopee.ph/*",
+    "*://shopee.vn/*",
+    "*://*.shopee.vn/*",
+    "*://shopee.tw/*",
+    "*://*.shopee.tw/*"
+  ],
+  "action": {
+    "default_title": "Shopee Review Exporter",
+    "default_popup": "popup/popup.html"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  }
+}
