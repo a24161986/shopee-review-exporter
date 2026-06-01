@@ -68,6 +68,36 @@ test('popup behavior imports pasted links retries failed tasks and uses shared t
   assert.equal(popupJs.includes('完成'), false);
 });
 
+test('popup hardens background command responses and retry control refresh', () => {
+  const popupJs = fs.readFileSync(path.join(root, 'extension/popup/popup.js'), 'utf8');
+
+  assert.equal(popupJs.includes('function isBackgroundCommand(type)'), true);
+  assert.equal(popupJs.includes('return { ok: value?.ok === true, value };'), true);
+  assert.match(popupJs, /async function retryFailed\(\) \{[\s\S]*backgroundRunning = true;[\s\S]*updateControls\(\);[\s\S]*if \(!response\.ok\) \{[\s\S]*backgroundRunning = false;[\s\S]*updateControls\(\);[\s\S]*return;[\s\S]*\}[\s\S]*updateControls\(\);[\s\S]*\}/);
+});
+
+test('popup disables product source controls while export is running', () => {
+  const popupJs = fs.readFileSync(path.join(root, 'extension/popup/popup.js'), 'utf8');
+
+  assert.match(popupJs, /async function scanCurrentWindowTabs\(\) \{\n  if \(backgroundRunning\) return;/);
+  assert.match(popupJs, /function importPastedLinks\(\) \{\n  if \(backgroundRunning\) return;/);
+  assert.match(popupJs, /clearPasteButton\.addEventListener\('click', \(\) => \{\n  if \(backgroundRunning\) return;/);
+  assert.equal(popupJs.includes('scanWindowButton.disabled = backgroundRunning;'), true);
+  assert.equal(popupJs.includes('pasteInput.disabled = backgroundRunning;'), true);
+  assert.equal(popupJs.includes('importLinksButton.disabled = backgroundRunning;'), true);
+  assert.equal(popupJs.includes('clearPasteButton.disabled = backgroundRunning;'), true);
+});
+
+test('popup summary and manifest description match current window import behavior', () => {
+  const popupJs = fs.readFileSync(path.join(root, 'extension/popup/popup.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'extension/manifest.json'), 'utf8'));
+
+  assert.equal(popupJs.includes("if (summaryCounts.total === 0) return '尚未识别商品';"), true);
+  assert.match(manifest.description, /current window/i);
+  assert.match(manifest.description, /pasted links/i);
+  assert.equal(manifest.description.includes('current tab'), false);
+});
+
 test('popup manifest no longer requests activeTab permission', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'extension/manifest.json'), 'utf8'));
   const validator = fs.readFileSync(path.join(root, 'scripts/validate-manifest.js'), 'utf8');

@@ -14,6 +14,7 @@ const taskList = document.getElementById('taskList');
 const status = document.getElementById('status');
 
 let products = [];
+let visibleTasks = [];
 let paused = false;
 let backgroundRunning = false;
 
@@ -24,6 +25,7 @@ stopButton.addEventListener('click', stopExport);
 retryFailedButton.addEventListener('click', retryFailed);
 importLinksButton.addEventListener('click', importPastedLinks);
 clearPasteButton.addEventListener('click', () => {
+  if (backgroundRunning) return;
   pasteInput.value = '';
 });
 formatSelect.addEventListener('change', saveSettings);
@@ -35,21 +37,27 @@ restoreSettings();
 requestState();
 
 async function scanCurrentWindowTabs() {
+  if (backgroundRunning) return;
+
   try {
     status.textContent = '正在识别当前窗口商品页...';
     const tabs = await chrome.tabs.query({ currentWindow: true });
+    if (backgroundRunning) return;
+
     const tabProducts = ShopeeReviewExporter.productsFromTabs(tabs);
     products = ShopeeReviewExporter.mergeProductSources(products, tabProducts);
     renderProducts(products.map((product) => ({ ...product, status: 'pending', fetched: 0, target: getSettings().count })));
     summary.textContent = buildSummaryText();
     status.textContent = `识别到 ${tabProducts.length} 个商品`;
-    startButton.disabled = backgroundRunning || products.length === 0;
+    updateControls();
   } catch (error) {
     status.textContent = `识别失败：${error.message}`;
   }
 }
 
 function importPastedLinks() {
+  if (backgroundRunning) return;
+
   const result = ShopeeReviewExporter.productsFromPastedText(pasteInput.value);
   const beforeCount = products.length;
   products = ShopeeReviewExporter.mergeProductSources(products, result.products);
@@ -57,7 +65,7 @@ function importPastedLinks() {
   renderProducts(products.map((product) => ({ ...product, status: 'pending', fetched: 0, target: getSettings().count })));
   summary.textContent = buildSummaryText();
   status.textContent = `已导入 ${addedCount} 个商品，忽略 ${result.ignoredCount} 条无效内容`;
-  startButton.disabled = backgroundRunning || products.length === 0;
+  updateControls();
 }
 
 function getSettings() {
@@ -93,37 +101,40 @@ function resolveStoredReviewFilter(exportSettings) {
 }
 
 async function startExport() {
+  if (backgroundRunning || products.length === 0) return;
+
   const settings = getSettings();
   saveSettings();
   paused = false;
   pauseButton.textContent = '暂停';
-  startButton.disabled = true;
-  pauseButton.disabled = false;
-  stopButton.disabled = false;
-  retryFailedButton.disabled = true;
+  backgroundRunning = true;
+  updateControls();
   status.textContent = '正在开始导出...';
   const response = await sendRuntimeMessage({ type: 'START_EXPORT', products, settings });
   if (!response.ok) {
+    backgroundRunning = false;
     status.textContent = '后台服务尚未就绪，暂时无法开始导出';
-    startButton.disabled = products.length === 0;
-    pauseButton.disabled = true;
-    stopButton.disabled = true;
-  } else {
-    backgroundRunning = true;
+    updateControls();
   }
 }
 
 async function retryFailed() {
-  retryFailedButton.disabled = true;
+  if (backgroundRunning) return;
+
+  backgroundRunning = true;
+  paused = false;
+  pauseButton.textContent = '暂停';
+  updateControls();
   status.textContent = '正在重试失败项...';
   const response = await sendRuntimeMessage({ type: 'RETRY_FAILED' });
   if (!response.ok) {
+    backgroundRunning = false;
     status.textContent = '后台服务尚未就绪，暂时无法重试';
-  } else {
-    backgroundRunning = true;
-    paused = false;
-    pauseButton.textContent = '暂停';
+    updateControls();
+    return;
   }
+
+  updateControls();
 }
 
 async function togglePause() {
@@ -153,10 +164,24 @@ async function requestState() {
 
 async function sendRuntimeMessage(message) {
   try {
-    return { ok: true, value: await chrome.runtime.sendMessage(message) };
+    const value = await chrome.runtime.sendMessage(message);
+    if (isBackgroundCommand(message.type)) {
+      return { ok: value?.ok === true, value };
+    }
+    return { ok: true, value };
   } catch {
     return { ok: false, value: null };
   }
+}
+
+function isBackgroundCommand(type) {
+  return [
+    'START_EXPORT',
+    'PAUSE_EXPORT',
+    'RESUME_EXPORT',
+    'STOP_EXPORT',
+    'RETRY_FAILED'
+  ].includes(type);
 }
 
 function handleBackgroundMessage(message) {
@@ -184,22 +209,29 @@ function applyState(state) {
 }
 
 function updateControls(tasks = null) {
+  const controlTasks = tasks || visibleTasks;
   const hasProducts = products.length > 0;
-  const hasFailures = ShopeeReviewExporter.hasFailedTasks(tasks || []);
+  const hasFailures = ShopeeReviewExporter.hasFailedTasks(controlTasks);
   startButton.disabled = backgroundRunning || !hasProducts;
   pauseButton.disabled = !backgroundRunning;
   stopButton.disabled = !backgroundRunning;
   retryFailedButton.disabled = backgroundRunning || !hasFailures;
+  scanWindowButton.disabled = backgroundRunning;
+  pasteInput.disabled = backgroundRunning;
+  importLinksButton.disabled = backgroundRunning;
+  clearPasteButton.disabled = backgroundRunning;
 }
 
 function buildSummaryText(tasks = products) {
   const summaryCounts = ShopeeReviewExporter.summarizeTasks(tasks);
+  if (summaryCounts.total === 0) return '尚未识别商品';
   return `总数：${summaryCounts.total} · 成功：${summaryCounts.done} · 失败：${summaryCounts.failed}`;
 }
 
 function renderProducts(tasks) {
+  visibleTasks = Array.isArray(tasks) ? tasks : [];
   taskList.innerHTML = '';
-  for (const task of tasks) {
+  for (const task of visibleTasks) {
     const statusText = ShopeeReviewExporter.statusLabel(task.status);
     const displayMarket = task.marketplaceCode || task.marketplace;
     const fetched = task.fetched || 0;

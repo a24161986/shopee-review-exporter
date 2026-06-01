@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Shopee Review Exporter",
   "version": "0.1.0",
-  "description": "Scan the current tab for Shopee product links and export product reviews to Excel or JSON.",
+  "description": "Scan current window Shopee product tabs and pasted links, then export product reviews to Excel or JSON.",
   "permissions": [
     "tabs",
     "scripting",
