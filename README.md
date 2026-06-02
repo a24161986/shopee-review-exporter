@@ -1,5 +1,7 @@
 # Shopee Review Exporter
 
+[中文说明](README.zh-CN.md)
+
 Chrome extension for identifying Shopee product detail tabs in the current Chrome window, importing pasted product links, and exporting each product's reviews to Excel or JSON.
 
 ## Development
