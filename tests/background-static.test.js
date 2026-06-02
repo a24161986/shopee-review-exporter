@@ -45,3 +45,10 @@ test('background normalizes restored statuses and reports final queue summary', 
   assert.equal(serviceWorker.includes('ShopeeReviewExporter.summarizeTasks(state.tasks)'), true);
   assert.equal(serviceWorker.includes('全部任务完成'), false);
 });
+
+test('background continues pagination after short non-empty review pages', () => {
+  assert.equal(serviceWorker.includes('if (pageReviews.length < DEFAULT_LIMIT) break;'), false);
+  assert.match(serviceWorker, /task\.pageFetches = \[\];/);
+  assert.match(serviceWorker, /task\.pageFetches\.push\(\{\s*offset,\s*limit: DEFAULT_LIMIT,\s*count: pageReviews\.length\s*\}\);/);
+  assert.match(serviceWorker, /offset \+= DEFAULT_LIMIT;/);
+});

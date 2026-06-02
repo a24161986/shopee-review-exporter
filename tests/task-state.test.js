@@ -108,7 +108,7 @@ test('prepareTasksForRestore rewrites retry markers and leaves non-selected pend
 test('resetFailedTasksForRetry requeues only failed tasks and reports retry count', () => {
   const result = resetFailedTasksForRetry([
     { id: 'a', status: 'done', fetched: 10, error: '', retryRunId: 41 },
-    { id: 'b', status: 'failed', fetched: 3, error: 'HTTP 403', retryRunId: 42 },
+    { id: 'b', status: 'failed', fetched: 3, error: 'HTTP 403', retryRunId: 42, pageFetches: [{ offset: 0, limit: 50, count: 3 }] },
     { id: 'c', status: 'pending', fetched: 0, error: '', retryRunId: 43 }
   ]);
 
@@ -128,6 +128,11 @@ test('resetFailedTasksForRetry requeues only failed tasks and reports retry coun
     false,
     false,
     false
+  ]);
+  assert.deepEqual(result.tasks.map((task) => task.pageFetches), [
+    undefined,
+    [],
+    undefined
   ]);
 });
 

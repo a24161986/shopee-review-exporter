@@ -82,6 +82,7 @@
         ...taskWithoutRetryRunId,
         status: TASK_STATUS.PENDING,
         fetched: 0,
+        pageFetches: [],
         error: '',
         retry: true
       };

@@ -196,7 +196,7 @@ function applyState(state) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : null;
   if (tasks) {
     renderProducts(tasks);
-    products = tasks.map(({ error, fetched, status, target, id, reviewFilter, filter, ratingType, format, ...product }) => product);
+    products = tasks.map(({ error, fetched, pageFetches, status, target, id, reviewFilter, filter, ratingType, format, ...product }) => product);
   }
 
   if (typeof state.message === 'string') status.textContent = state.message;

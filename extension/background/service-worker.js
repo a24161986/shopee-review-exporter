@@ -100,6 +100,7 @@ async function startExport(products, settings) {
     id: `${product.key || `${product.domain}:${product.shopId}:${product.itemId}`}:${index}`,
     status: 'pending',
     fetched: 0,
+    pageFetches: [],
     target,
     reviewFilter: reviewFilter.reviewFilter,
     filter: reviewFilter.filter,
@@ -294,6 +295,7 @@ async function processTask(runId, task) {
 
     const rawReviews = [];
     let offset = 0;
+    task.pageFetches = [];
 
     while (rawReviews.length < task.target) {
       assertActiveRun(runId);
@@ -304,14 +306,27 @@ async function processTask(runId, task) {
       assertActiveRun(runId);
 
       const pageReviews = payload?.data?.ratings || [];
-      if (!Array.isArray(pageReviews) || pageReviews.length === 0) break;
+      if (!Array.isArray(pageReviews)) break;
+
+      task.pageFetches.push({
+        offset,
+        limit: DEFAULT_LIMIT,
+        count: pageReviews.length
+      });
+
+      if (pageReviews.length === 0) {
+        state.message = `没有更多评论：第 ${task.pageFetches.length} 页返回 0 条`;
+        publishState();
+        break;
+      }
 
       rawReviews.push(...pageReviews);
       task.fetched = Math.min(rawReviews.length, task.target);
+      state.message = `正在导出 ${task.marketplace} ${task.shopId}.${task.itemId}：第 ${task.pageFetches.length} 页 ${pageReviews.length} 条`;
       publishState();
 
-      if (pageReviews.length < DEFAULT_LIMIT) break;
       offset += DEFAULT_LIMIT;
+      if (rawReviews.length >= task.target) break;
       await sleepInterruptibly(runId, BETWEEN_PAGE_DELAY_MS);
     }
 
