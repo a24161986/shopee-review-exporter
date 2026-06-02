@@ -1,6 +1,6 @@
 # Shopee Review Exporter
 
-Chrome extension for scanning the current tab for Shopee product links and exporting each product's reviews to Excel or JSON.
+Chrome extension for identifying Shopee product detail tabs in the current Chrome window, importing pasted product links, and exporting each product's reviews to Excel or JSON.
 
 ## Development
 
@@ -19,22 +19,15 @@ npm run verify
 
 ## Usage
 
-1. Open a page that contains Shopee product links.
+1. Open one or more Shopee product detail pages in the same Chrome window.
 2. Open the extension popup.
-3. Click Scan Current Tab.
-4. Choose export format, review count, and review filter.
-5. Click Start Export.
+3. Click `识别当前窗口商品页`.
+4. Optionally paste extra Shopee product links into `粘贴商品链接` and click `导入链接`.
+5. Choose export format, review count, and review filter.
+6. Click `开始导出`.
+7. Review the task list for `成功` and `失败`.
+8. Click `重试失败项` to rerun only failed products.
 
 ## Manual QA Checklist
 
-- Scan a normal webpage that contains multiple Shopee product links.
-- Confirm duplicate Shopee links appear only once.
-- Export Excel with the default count of 100 reviews.
-- Export JSON with a smaller count such as 5 reviews.
-- Confirm the image/video filter exports only media reviews.
-- Confirm a star filter such as 5 星 exports that rating instead of all ratings.
-- Confirm exported reviews are sorted newest to oldest by review time.
-- Confirm each product downloads as a separate file.
-- Confirm pause stops progress before the next API page or next product.
-- Confirm stop closes the current background product tab.
-- Confirm a failed product shows an error and later products continue.
+See [docs/manual-qa.md](docs/manual-qa.md).
